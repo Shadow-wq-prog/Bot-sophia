@@ -10,7 +10,7 @@ import chalk from 'chalk'
 const execPromise = promisify(exec)
 
 export default {
-  command: ['rfix', 'actualizar', 'fix'], 
+  command: ['actualizar', 'fix'], 
   isOwner: true, 
   run: async (client, m) => {
     try {
