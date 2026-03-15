@@ -1,6 +1,6 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
-Versión: V5 (Fuerza Bruta - Anti-Saturación)
+Versión: V6 (Triple API de Respaldo + Limpieza de Buffer)
 */
 
 import fetch from 'node-fetch';
@@ -14,53 +14,51 @@ export default {
         try {
             await client.sendMessage(m.chat, { react: { text: '🔍', key: m.key } });
 
-            // 1. Búsqueda con un servidor alternativo más estable
-            const searchUrl = `https://api.tikhub.io/v1/tiktok/search?keyword=${encodeURIComponent(text)}`;
-            const searchRes = await fetch(searchUrl);
-            const searchData = await searchRes.json();
+            // 1. Buscamos el video
+            const searchRes = await fetch(`https://api.lolhuman.xyz/api/tiktoksearch?apikey=GataDios&query=${encodeURIComponent(text)}`);
+            const searchJson = await searchRes.json();
 
-            // Si falla la búsqueda anterior, usamos la de respaldo que ya conocemos
-            let videoUrl = searchData?.data?.videos?.[0]?.video_id 
-                ? `https://www.tiktok.com/@user/video/${searchData.data.videos[0].video_id}`
-                : null;
+            if (!searchJson.result || !searchJson.result[0]) throw new Error('No encontré resultados.');
 
-            if (!videoUrl) {
-                const backupSearch = await fetch(`https://api.lolhuman.xyz/api/tiktoksearch?apikey=GataDios&query=${encodeURIComponent(text)}`);
-                const backupJson = await backupSearch.json();
-                videoUrl = backupJson.result?.[0]?.link;
+            const videoUrl = searchJson.result[0].link; 
+            let finalVideo = null;
+
+            // 2. SISTEMA DE RESPALDO (Probamos 3 fuentes antes de rendirnos)
+            const apis = [
+                `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(videoUrl)}`,
+                `https://api.botcahx.eu.org/api/dowloader/tiktok?url=${encodeURIComponent(videoUrl)}&apikey=Admin`,
+                `https://deliriussapi-official.vercel.app/download/tiktokdl?url=${encodeURIComponent(videoUrl)}`
+            ];
+
+            for (const api of apis) {
+                try {
+                    const res = await fetch(api);
+                    const contentType = res.headers.get('content-type');
+                    
+                    // Si no es JSON real, saltamos al siguiente servidor
+                    if (!contentType || !contentType.includes('application/json')) continue;
+
+                    const json = await res.json();
+                    const link = json.video?.noWatermark || json.result?.video?.no_watermark || json.data?.nowm || json.result?.link;
+
+                    if (link && typeof link === 'string') {
+                        finalVideo = link;
+                        break; 
+                    }
+                } catch (e) { continue; }
             }
 
-            if (!videoUrl) throw new Error('No encontré resultados. Intenta con palabras más simples.');
-
-            await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
-
-            // 2. Descarga usando una API de "limpieza" para asegurar que sea un String
-            const downloadUrl = `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(videoUrl)}`;
-            const dlRes = await fetch(downloadUrl);
-            const dlData = await dlRes.json();
-
-            // Extraemos el link asegurando que sea texto puro
-            const finalVideo = dlData.video?.noWatermark || dlData.video?.url || dlData.result?.video;
-
-            if (!finalVideo || typeof finalVideo !== 'string') {
-                throw new Error('El video está protegido o el servidor de descarga falló.');
-            }
-
-            let caption = `亗 *TIKTOK SEARCH* 亗\n\n`;
-            caption += `📝 *Título:* ${dlData.video?.title || text}\n`;
-            caption += `👤 *Autor:* ${dlData.author?.nickname || 'TikTok User'}\n\n`;
-            caption += `> ✅ *Video procesado con éxito.*`;
+            if (!finalVideo) throw new Error('Todos los servidores están saturados (HTML Error).');
 
             await client.sendMessage(m.chat, { 
                 video: { url: finalVideo }, 
-                caption: caption
+                caption: `亗 *TIKTOK SEARCH* 亗\n\n> ✅ Video obtenido sin marca de agua.`
             }, { quoted: m });
 
             await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (e) {
-            console.error(e);
-            m.reply(`❌ *FALLO:* ${e.message}\n\n> Intenta de nuevo, a veces los servidores se liberan en segundos.`);
+            m.reply(`❌ *FALLO:* ${e.message}\n> Tip: Reintenta en 5 segundos, los servidores suelen liberarse rápido.`);
             await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
         }
     }
