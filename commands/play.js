@@ -4,28 +4,29 @@ Optimizado para: Shadow-wq-prog (Bot-sophia)
 */
 
 import fetch from 'node-fetch';
+import https from 'https';
 
 export default {
   command: ['play', 'mp3', 'ytmp3'],
   category: 'downloader',
-  run: async (client, m, { args, text }) => { // Añadimos text y args aquí
+  run: async (client, m, { args, text }) => {
     try {
-      // Usamos 'text' o 'args' para que no ignore lo que escribes
       const search = text || args.join(' '); 
-      
-      if (!search) return m.reply('《✧》Por favor, indica el nombre de la canción o un link de YouTube.');
+      if (!search) return m.reply('《✧》Por favor, indica el nombre de la canción.');
 
       await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
-      // CONFIGURACIÓN CON TU API KEY DE EVOGB
+      // Agente para ignorar errores de certificado SSL si la API bloquea
+      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
       const apiUrl = `https://api.evogb.org/dl/youtubeplay?query=${encodeURIComponent(search)}&apikey=${global.api.key}`;
 
-      const response = await fetch(apiUrl);
+      const response = await fetch(apiUrl, { agent: httpsAgent });
       const res = await response.json();
 
       if (!res.status || !res.data) {
         await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
-        return m.reply('《✧》 No encontré resultados. Asegúrate de que tu API Key sea válida.');
+        return m.reply('《✧》 No encontré resultados. Revisa que tu Key sea: evogb-zrJLIAnF');
       }
 
       const { title, author, duration, thumbnail, download } = res.data;
@@ -34,15 +35,15 @@ export default {
                       `> ✿⃘࣪◌ ֪ *Título:* ${title}\n` +
                       `> ✿⃘࣪◌ ֪ *Canal:* ${author}\n` +
                       `> ✿⃘࣪◌ ֪ *Duración:* ${duration}\n\n` +
-                      `𐙚 _Enviando audio, espera un momento..._`;
+                      `𐙚 _Enviando audio..._`;
 
-      // 1. Enviamos la imagen con la info
+      // 1. Imagen con info
       await client.sendMessage(m.chat, { 
         image: { url: thumbnail }, 
         caption 
       }, { quoted: m });
 
-      // 2. Enviamos el audio directo
+      // 2. Audio directo (usando el enlace de descarga de EvoGB)
       await client.sendMessage(m.chat, { 
         audio: { url: download.url }, 
         fileName: `${title}.mp3`, 
@@ -53,7 +54,7 @@ export default {
 
     } catch (e) {
       console.error(e);
-      await m.reply("《✧》 Error al conectar con el servidor de descargas.");
+      await m.reply("《✧》 Error de conexión. Intenta de nuevo en unos segundos.");
     }
   }
 };
