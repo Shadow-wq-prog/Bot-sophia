@@ -1,6 +1,6 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
-Versión: Búsqueda Directa (Sin Link) + No Watermark
+Versión: V2 (Corrección de error de Path + Búsqueda)
 */
 
 import fetch from 'node-fetch';
@@ -9,50 +9,49 @@ export default {
     command: ['tiktok', 'tk', 'tt'],
     alias: ['tiktoks'],
     run: async (client, m, { text, prefix, command }) => {
-        if (!text) return m.reply(`✨ *¿Qué deseas buscar en TikTok?*\n\nEjemplo: *${prefix + command} Messi edit*`);
+        if (!text) return m.reply(`✨ *¿Qué buscas en TikTok?*\n\nEjemplo: *${prefix + command} Messi edit*`);
 
         try {
             await client.sendMessage(m.chat, { react: { text: '🔍', key: m.key } });
 
-            // 1. Buscamos el video basándonos en el texto
+            // 1. Buscamos el video
             const searchRes = await fetch(`https://api.lolhuman.xyz/api/tiktoksearch?apikey=GataDios&query=${encodeURIComponent(text)}`);
             const searchJson = await searchRes.json();
 
-            if (!searchJson.result || searchJson.result.length === 0) {
-                throw new Error('No encontré ningún video con ese nombre.');
+            if (!searchJson.result || !searchJson.result[0]) {
+                throw new Error('No encontré resultados para esa búsqueda.');
             }
 
-            // Tomamos el primer resultado (el más relevante)
+            // Extraemos el enlace del primer video encontrado
             const videoUrl = searchJson.result[0].link; 
-            
-            await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
-            // 2. Descargamos el video del link obtenido (Sin marca de agua)
+            // 2. Obtenemos el video sin marca de agua
             const downloadRes = await fetch(`https://api.lolhuman.xyz/api/tiktok?apikey=GataDios&url=${videoUrl}`);
             const downloadJson = await downloadRes.json();
 
-            if (!downloadJson.result || !downloadJson.result.link) {
-                throw new Error('Encontré el video pero no pude procesar la descarga.');
+            // REVISIÓN CRÍTICA: Aseguramos que 'link' sea un texto (URL) y no otra cosa
+            const finalVideo = downloadJson.result?.link || downloadJson.result?.wm;
+
+            if (!finalVideo || typeof finalVideo !== 'string') {
+                throw new Error('El servidor entregó un formato de enlace inválido.');
             }
 
-            const { link, title, author, nickname } = downloadJson.result;
+            let caption = `亗 *TIKTOK DOWNLOADER* 亗\n\n`;
+            caption += `📝 *Título:* ${downloadJson.result?.title || text}\n`;
+            caption += `👤 *Usuario:* ${downloadJson.result?.nickname || 'TikTok User'}\n\n`;
+            caption += `> ⚙️ *Enviando contenido sin marca de agua...*`;
 
-            let caption = `亗 *TIKTOK SEARCH* 亗\n\n`;
-            caption += `📝 *Título:* ${title || text}\n`;
-            caption += `👤 *Autor:* ${nickname} (@${author})\n\n`;
-            caption += `> ⚙️ *Enviando el primer resultado de la búsqueda...*`;
-
+            // Enviamos el video asegurando que sea la URL directa
             await client.sendMessage(m.chat, { 
-                video: { url: link }, 
-                caption: caption,
-                fileName: `tiktok.mp4` 
+                video: { url: finalVideo }, 
+                caption: caption
             }, { quoted: m });
 
             await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (e) {
             console.error(e);
-            m.reply(`❌ *FALLO:* ${e.message}`);
+            m.reply(`❌ *FALLO:* ${e.message}\n> Intenta con otra búsqueda si el error persiste.`);
             await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
         }
     }
