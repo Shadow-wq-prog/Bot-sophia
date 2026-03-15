@@ -3,21 +3,20 @@ Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
 Optimizado para: Shadow-wq-prog (Bot-sophia)
 */
 
-import { getBuffer } from '../lib/message.js'; 
 import fetch from 'node-fetch';
 
 export default {
   command: ['play', 'mp3', 'ytmp3'],
   category: 'downloader',
-  run: async (client, m) => {
+  run: async (client, m, args) => {
     try {
-      const text = m.text; // Usamos el texto que ya procesa tu smsg
+      // Usamos args para capturar el texto después del comando
+      const text = args.join(' '); 
       if (!text) return m.reply('《✧》Por favor, indica el nombre de la canción.');
 
       await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
-      // --- CONFIGURACIÓN DE URL PARA EVOGB ---
-      // El servidor espera: ?query=NOMBRE&apikey=KEY
+      // CONFIGURACIÓN DE URL PARA EVOGB
       const apiUrl = `https://api.evogb.org/dl/youtubeplay?query=${encodeURIComponent(text)}&apikey=${global.api.key}`;
 
       const response = await fetch(apiUrl);
@@ -25,7 +24,7 @@ export default {
 
       if (!res.status || !res.data) {
         await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
-        return m.reply('《✧》 No encontré resultados. Revisa que tu API Key en settings.js sea correcta.');
+        return m.reply('《✧》 No se encontraron resultados. Verifica tu API Key en settings.js.');
       }
 
       const { title, author, duration, thumbnail, download } = res.data;
@@ -37,11 +36,12 @@ export default {
                       `𐙚 _Enviando audio..._`;
 
       // 1. Enviamos la miniatura con la info
-      const thumbBuffer = await getBuffer(thumbnail);
-      await client.sendMessage(m.chat, { image: thumbBuffer, caption }, { quoted: m });
+      await client.sendMessage(m.chat, { 
+        image: { url: thumbnail }, 
+        caption 
+      }, { quoted: m });
 
-      // 2. Enviamos el audio directamente
-      // Usamos download.url que es el enlace directo que da EvoGB
+      // 2. Enviamos el audio directamente desde la URL de la API
       await client.sendMessage(m.chat, { 
         audio: { url: download.url }, 
         fileName: `${title}.mp3`, 
@@ -52,7 +52,7 @@ export default {
 
     } catch (e) {
       console.error(e);
-      await m.reply("《✧》 Error al conectar con el servidor de descargas.");
+      await m.reply("《✧》 Error al conectar con el servidor de música.");
     }
   }
 };
