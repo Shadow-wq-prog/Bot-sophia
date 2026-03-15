@@ -10,7 +10,7 @@ export default {
             await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
             // CAMBIA ESTO POR TU KEY REAL DE EVO-GB
-            const api_key = 'TU_API_KEY_AQUÍ'; 
+            const api_key = 'evogb-zrJLIAnF'; 
             const url = `https://evogb.xyz/api/v1/ytplay?query=${encodeURIComponent(text)}&key=${api_key}`;
 
             const res = await fetch(url);
