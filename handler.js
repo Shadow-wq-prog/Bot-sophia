@@ -1,6 +1,6 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗 & Shadow Flash
-Versión: Ultra-Limpia (Anti-Bloqueo de ID)
+Versión: Final Blindada (Anti-Owner Error)
 */
 
 import moment from 'moment';
@@ -15,7 +15,6 @@ import blacklist from './blacklist.js';
 
 seeCommands();
 
-// Tu número configurado
 const myNumber = '51983564381@s.whatsapp.net'; 
 const groupMetadataCache = new Map();
 const GROUP_CACHE_TTL = 60000;
@@ -37,11 +36,8 @@ async function getCachedGroupMetadata(client, chatId) {
 export default async (client, m) => {
   if (!m?.message) return;
 
-  // 1. LIMPIEZA AGRESIVA DE ID (Esto mata el error del doble @s.whatsapp.net)
-  const senderRaw = m.sender || m.key.participant || m.key.remoteJid;
-  const sender = senderRaw.split('@')[0].split(':')[0] + '@s.whatsapp.net';
-  
-  // Comparación blindada
+  // 1. Limpieza de ID Extrema
+  const sender = m.sender.split('@')[0].split(':')[0] + '@s.whatsapp.net';
   const isVotOwn = sender === myNumber || global.ownerSet.has(sender);
 
   // 2. Extracción de Texto
@@ -55,9 +51,7 @@ export default async (client, m) => {
   antilink(m, client);
 
   const from = m.key.remoteJid;
-  const selfIdRaw = client.user.id;
-  const selfId = selfIdRaw.split('@')[0].split(':')[0] + "@s.whatsapp.net";
-  
+  const selfId = client.user.id.split('@')[0].split(':')[0] + "@s.whatsapp.net";
   const chat = global.db.data.chats[from] || {};
   const tf = chat.users?.[m.sender] || {};
   const todayDate = new Date().toLocaleDateString('es-CO').split('/').reverse().join('-');
@@ -66,9 +60,7 @@ export default async (client, m) => {
   const prefix = '¥';
   if (!body.startsWith(prefix)) return;
 
-  // Log ultra-visible en consola para depurar
-  console.log(chalk.bgMagenta.white(`[ ID LIMPIO ]`) + chalk.white(` ${sender}`));
-  console.log(chalk.bgCyan.black(`[ CMD ]`) + chalk.cyan(` ${body}`));
+  console.log(chalk.bgCyan.black(`[ CMD ]`) + chalk.cyan(` ${body} | De: ${sender}`));
 
   const args = body.slice(prefix.length).trim().split(/ +/);
   const command = args.shift()?.toLowerCase();
@@ -80,15 +72,15 @@ export default async (client, m) => {
   // 5. Gestión de Admins
   let groupMetadata = m.isGroup ? await getCachedGroupMetadata(client, m.chat) : null;
   let groupAdmins = groupMetadata?.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin') || [];
-  const isAdmins = m.isGroup ? groupAdmins.some(p => p.id.includes(sender.split('@')[0])) : false;
-  const isBotAdmins = m.isGroup ? groupAdmins.some(p => p.id.includes(selfId.split('@')[0])) : false;
+  const isAdmins = m.isGroup ? groupAdmins.some(p => p.id.split('@')[0] === sender.split('@')[0]) : false;
+  const isBotAdmins = m.isGroup ? groupAdmins.some(p => p.id.split('@')[0] === selfId.split('@')[0]) : false;
 
-  // 6. Validaciones de Seguridad
+  // 6. Filtros de Seguridad (Prioridad Owner)
   if (chat.bannedGrupo && !isVotOwn) return;
   if (tf.banned && !isVotOwn) return m.reply(`❌ Estás vetado.`);
   
   if (cmdData.isOwner && !isVotOwn) {
-      console.log(chalk.red(`[ BLOQUEO ] Intento fallido de Owner. Sender: ${sender} vs MyNumber: ${myNumber}`));
+      console.log(chalk.red(`[ BLOQUEO ] Usuario ${sender} intentó usar comando de Owner.`));
       return m.reply(`❌ Solo el Owner puede usar esto.`);
   }
   
@@ -100,21 +92,11 @@ export default async (client, m) => {
     const userGlobal = global.db.data.users[m.sender] || {};
     userGlobal.usedcommands = (userGlobal.usedcommands || 0) + 1;
 
-    await cmdData.run(client, m, { 
-      args, 
-      text, 
-      command, 
-      prefix, 
-      isVotOwn, 
-      isAdmins, 
-      isBotAdmins, 
-      groupMetadata 
-    });
-
+    await cmdData.run(client, m, { args, text, command, prefix, isVotOwn, isAdmins, isBotAdmins, groupMetadata });
     console.log(chalk.green(`[ OK ] ${prefix}${command} ejecutado.`));
 
   } catch (error) {
-    console.error(chalk.red(`[ ERROR ]`), error);
+    console.error(chalk.red(`[ RUN ERROR ]`), error);
     if (!error.message.includes('db.write')) m.reply('🌱 Error al ejecutar el comando.');
   }
 
