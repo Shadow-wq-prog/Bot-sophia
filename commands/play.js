@@ -9,23 +9,29 @@ export default {
         try {
             await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
-            // NUEVA URL DE LA API SEGÚN TU NAVEGADOR
+            // URL ACTUALIZADA A .ORG
             const api_key = 'evogb-zrJLlAnF'; 
             const url = `https://api.evogb.org/api/v1/ytplay?query=${encodeURIComponent(text)}&key=${api_key}`;
 
             const res = await fetch(url);
-            const json = await res.json();
-
-            if (!json.result || !json.result.download) {
-                throw new Error('No se encontró el archivo. Verifica tu saldo o la Key.');
+            
+            // Si la respuesta no es JSON, capturamos el error aquí
+            const textData = await res.text();
+            let json;
+            try {
+                json = JSON.parse(textData);
+            } catch (e) {
+                throw new Error('La API respondió con un error de servidor (HTML). Intenta más tarde.');
             }
 
-            const { title, download } = json.result;
+            if (!json.result || !json.result.download) {
+                throw new Error('No se encontró el archivo o la Key no tiene saldo.');
+            }
 
             await client.sendMessage(m.chat, { 
-                audio: { url: download }, 
+                audio: { url: json.result.download }, 
                 mimetype: 'audio/mpeg',
-                fileName: `${title}.mp3`
+                fileName: `${json.result.title}.mp3`
             }, { quoted: m });
 
             await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
