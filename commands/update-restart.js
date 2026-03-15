@@ -1,42 +1,69 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
-Adaptado para: Shadow-wq-prog (Bot-sophia)
+Versión: Definitiva (Git + DB Safe + Auto-Aviso)
 */
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import chalk from 'chalk' 
+import path from 'path'
+import chalk from 'chalk'
 
 const execPromise = promisify(exec)
 
 export default {
-  command: ['actualizar', 'fix'], 
+  command: ['rfix', 'actualizar'], 
   isOwner: true, 
-  run: async (client, m) => {
+  run: async (client, m, { text, args }) => {
     try {
-      // Reacción de espera
+      // Reacción inicial
       await client.sendMessage(m.chat, { react: { text: '🕑', key: m.key } })
 
-      // 1. CONFIGURACIÓN DE GIT
+      // 1. CARGA DINÁMICA DEL LOADER (Para refrescar comandos sin morir)
+      const loaderPath = path.join(process.cwd(), 'lib/system/commandLoader.js')
+      const { default: loadCommands } = await import(`file://${loaderPath}?update=${Date.now()}`)
+
+      // 2. PROTECCIÓN DE BASE DE DATOS Y AVISO
+      if (global.db && global.db.data) {
+        global.db.data.lastChat = m.chat; // Guardamos el chat para que el index avise al volver
+        
+        try {
+          if (typeof global.db.write === 'function') {
+            await global.db.write();
+          }
+        } catch (dbErr) {
+          console.log(chalk.yellow("⚠️ No se pudo forzar el guardado de la DB, pero continuando..."));
+        }
+      }
+
+      // 3. CONFIGURACIÓN Y BUSQUEDA EN GIT
       await execPromise('git config user.email "bot@host.com"')
       await execPromise('git config user.name "HostBot"')
-      
-      // 2. BUSCAR ACTUALIZACIONES
       await execPromise('git fetch origin')
+
       const { stdout: branch } = await execPromise('git rev-parse --abbrev-ref HEAD')
       const currentBranch = branch.trim()
 
-      // Verificar qué archivos cambiaron
+      const { stdout: local } = await execPromise('git rev-parse HEAD')
+      const { stdout: remote } = await execPromise(`git rev-parse origin/${currentBranch}`)
+
+      // 4. CASO A: YA ESTÁ ACTUALIZADO
+      if (local.trim() === remote.trim()) {
+          if (global.comandos) global.comandos.clear()
+          await loadCommands()
+          await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
+          return m.reply('✨ *SISTEMA:* El bot ya está en su última versión. Comandos refrescados correctamente.')
+      }
+
+      // 5. CASO B: HAY CAMBIOS (DESCARGAR Y REINICIAR)
       const { stdout: diffStatus } = await execPromise(`git diff --name-status HEAD..origin/${currentBranch}`).catch(() => ({ stdout: '' }))
       const { stdout: info } = await execPromise(`git log HEAD..origin/${currentBranch} --format="%an" -1`).catch(() => ({ stdout: 'Desconocido' }))
 
       const lines = diffStatus.trim().split('\n').filter(line => line.trim() !== '')
       const totalFiles = lines.length
 
-      // 3. APLICAR CAMBIOS (Reset hard para limpiar errores locales)
       await execPromise(`git reset --hard origin/${currentBranch}`)
 
-      // Preparar lista de archivos para el mensaje
+      // Preparar lista visual de cambios
       let changeList = lines.map(line => {
         const [status, ...fileParts] = line.split(/\s+/)
         const file = fileParts.join(' ')
@@ -46,33 +73,20 @@ export default {
           case 'D': return `- ${file}`
           default: return `? ${file}`
         }
-      }).slice(0, 20).join('\n')
+      }).slice(0, 15).join('\n')
 
       let msg = `❀ *ACTUALIZACIÓN EXITOSA*\n\n`
       msg += `亗 *Editor:* ${info.trim()}\n`
       msg += `✎ *Total Cambios:* ${totalFiles}\n\n`
-
-      if (totalFiles > 0) {
-          msg += `ꕥ *Archivos actualizados:*\n\`\`\`${changeList}${totalFiles > 20 ? '\n...entre otros.' : ''}\`\`\`\n\n`
-      } else {
-          msg += `> *El bot ya está en su última versión.*\n\n`
-      }
-
-      msg += `> ⚙️ *Reiniciando sistema...* Por favor espera.`
-
-      // 4. GUARDAR CONTEXTO PARA EL AVISO AL VOLVER
-      // Guardamos el ID del chat en la base de datos global
-      if (global.db && global.db.data) {
-        global.db.data.lastChat = m.chat; 
-        await global.db.write(); // Forzamos el guardado en el JSON
-      }
+      if (totalFiles > 0) msg += `ꕥ *Archivos:*\n\`\`\`${changeList}${totalFiles > 15 ? '\n...entre otros.' : ''}\`\`\`\n\n`
+      msg += `> ⚙️ *Reiniciando sistema para aplicar cambios core...*`
 
       await client.sendMessage(m.chat, { text: msg }, { quoted: m })
       await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
 
-      console.log(chalk.greenBright(`✅ Sistema actualizado. Guardando chat ${m.chat} y reiniciando...`)) 
+      console.log(chalk.greenBright(`✅ Actualizado y guardado chat ${m.chat}. Reiniciando proceso...`)) 
 
-      // 5. REINICIO FINAL
+      // Reiniciamos el proceso para que los cambios en index.js o handler.js surtan efecto
       setTimeout(() => {
         process.exit(0)
       }, 3000)
