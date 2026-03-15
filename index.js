@@ -191,27 +191,40 @@ async function startBot() {
     if (connection == "open") {
       console.log(boxen(chalk.bold(' ¡CONECTADO CON WHATSAPP! '), { borderStyle: 'round', borderColor: 'green', title: chalk.green.bold('● CONEXIÓN ●'), titleAlignment: 'center', float: 'center' }));
       
-      // --- LÓGICA DE AVISO DE REINICIO (UNIDA) ---
-      
-      // 1. Aviso mediante Base de Datos (lastChat)
-      if (global.db && global.db.data && global.db.data.lastChat) {
-        const lastChat = global.db.data.lastChat;
-        await clientt.sendMessage(lastChat, { 
-            text: '✅ *¡Reinicio completado!* El sistema de comandos se ha actualizado y está listo para usarse.' 
-        });
-        global.db.data.lastChat = null; 
-      }
+      // --- LÓGICA DE AVISO DE REINICIO MEJORADA ---
+      _setTimeout(async () => {
+        // 1. Aviso mediante Base de Datos (lastChat)
+        if (global.db && global.db.data && global.db.data.lastChat) {
+          const lastChat = global.db.data.lastChat;
+          await clientt.sendMessage(lastChat, { 
+              text: '✅ *REINICIO COMPLETADO*\n\nEl sistema se ha actualizado y ya está operando con normalidad. ¡Listo para usar! 亗' 
+          });
+          global.db.data.lastChat = null;
+          if (global.db.write) await global.db.write();
+        }
 
-      // 2. Aviso mediante restart_flag.txt (Compatibilidad)
-      const restartFlagPath = path.join(process.cwd(), 'restart_flag.txt');
-      if (fs.existsSync(restartFlagPath)) {
-        try {
-          const destination = fs.readFileSync(restartFlagPath, 'utf-8').trim();
-          const msg = '*『Mυʂιƈαɾƚ ɯα Ⴆσƚ』* ```se ha reiniciado con éxito```';
-          if (destination.includes('@')) await clientt.sendMessage(destination, { text: msg });
-          fs.unlinkSync(restartFlagPath); 
-        } catch {}
-      }
+        // 2. Aviso para Sub-Bots o Configuraciones (lastChatRestart)
+        const selfId = clientt.user.id.split(':')[0] + "@s.whatsapp.net";
+        if (global.db?.data?.settings?.[selfId]?.lastChatRestart) {
+          const target = global.db.data.settings[selfId].lastChatRestart;
+          await clientt.sendMessage(target, { 
+              text: '🚀 *SISTEMA EN LÍNEA*\nReiniciado correctamente después de la actualización de archivos core.' 
+          });
+          global.db.data.settings[selfId].lastChatRestart = null;
+          if (global.db.write) await global.db.write();
+        }
+
+        // 3. Aviso mediante restart_flag.txt (Retrocompatibilidad)
+        const restartFlagPath = path.join(process.cwd(), 'restart_flag.txt');
+        if (fs.existsSync(restartFlagPath)) {
+          try {
+            const destination = fs.readFileSync(restartFlagPath, 'utf-8').trim();
+            const msg = '*『Mυʂιƈαɾƚ ɯα Ⴆσ႕』* ```se ha reiniciado con éxito```';
+            if (destination.includes('@')) await clientt.sendMessage(destination, { text: msg });
+            fs.unlinkSync(restartFlagPath); 
+          } catch {}
+        }
+      }, 5000); // Espera de 5 segundos para estabilidad de conexión
     }
   });
 
