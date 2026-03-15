@@ -8,46 +8,53 @@ import fetch from 'node-fetch'
 export default {
   command: ['play', 'mp3', 'ytmp3'],
   category: 'downloads',
-  run: async (client, m, { text }) => {
-    if (!text) return m.reply('《✧》Por favor, indica el nombre de la canción.')
+  run: async (client, m, { text, args }) => {
+    // Intentamos obtener el texto de varias formas para que no falle
+    const query = text || args.join(' ') || (m.quoted && m.quoted.text);
+    
+    if (!query) return m.reply('《✧》Por favor, indica el nombre de la canción.');
 
-    await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } })
+    await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
     try {
-      // Usamos la URL completa y la key que ya tienes configurada
-      const api_key = 'evogb-zrJLIAnF' 
-      const apiUrl = `https://api.evogb.org/dl/youtubeplay?query=${encodeURIComponent(text)}&apikey=${api_key}`
+      // Usamos tu Key activa: evogb-zrJLIAnF
+      const api_key = global.api.key || 'evogb-zrJLIAnF';
+      const apiUrl = `https://api.evogb.org/dl/youtubeplay?query=${encodeURIComponent(query)}&apikey=${api_key}`;
 
-      const response = await fetch(apiUrl)
-      const res = await response.json()
+      const response = await fetch(apiUrl);
+      const res = await response.json();
 
-      // Si la API responde con error o no hay datos
       if (!res.status || !res.data) {
-        await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } })
-        return m.reply('《✧》 La API no devolvió resultados. Intenta con otro nombre.')
+        await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
+        return m.reply('《✧》 No encontré resultados. Intenta con otro nombre.');
       }
 
-      const { title, thumbnail, download } = res.data
+      const { title, thumbnail, download, author, duration } = res.data;
 
-      // 1. Enviamos la imagen con el título
+      const caption = `➥ *DESCARGA FINALIZADA*\n\n` +
+                      `> ✿⃘࣪◌ ֪ *Título:* ${title}\n` +
+                      `> ✿⃘࣪◌ ֪ *Canal:* ${author}\n` +
+                      `> ✿⃘࣪◌ ֪ *Duración:* ${duration}\n\n` +
+                      `𐙚 _Enviando audio..._`;
+
+      // 1. Imagen con info
       await client.sendMessage(m.chat, { 
         image: { url: thumbnail }, 
-        caption: `✅ *Título:* ${title}\n\n𐙚 _Descargando audio, espera..._` 
-      }, { quoted: m })
+        caption 
+      }, { quoted: m });
 
-      // 2. Enviamos el audio (usamos el enlace directo de descarga)
+      // 2. Audio directo
       await client.sendMessage(m.chat, { 
         audio: { url: download.url }, 
         fileName: `${title}.mp3`, 
         mimetype: 'audio/mpeg' 
-      }, { quoted: m })
+      }, { quoted: m });
 
-      await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
+      await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
     } catch (e) {
-      console.error(e)
-      // Si el error persiste, es probable que la IP de tu hosting esté bloqueada por la API
-      await m.reply("《✧》 Error al conectar con Evogb. Verifica si tu API Key sigue activa en el dashboard.")
+      console.error(e);
+      await m.reply("《✧》 Error al conectar con Evogb. Intenta de nuevo.");
     }
   }
 }
