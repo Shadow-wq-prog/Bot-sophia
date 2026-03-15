@@ -5,12 +5,12 @@ import chalk from 'chalk';
 // CONFIGURACIÓN DE DUEÑOS Y PREFIJO
 // ———————————————————————————————————————————————————————————————————
 global.owner = [  
-  ['51983564381', 'Shadow Flash', true],
-  ['5491140642242', 'Owner 2', true],
-  ['584228028583', 'Owner 3', true]
+  '51983564381',
+  '5491140642242',
+  '584228028583'
 ]
 
-global.prefix = '√' // <--- TU NUEVO PREFIJO ESTABLECIDO
+global.prefix = '√'  // <--- TU NUEVO PREFIJO ESTABLECIDO
 
 global.maintenanceUsers = [] 
 global.mods = []
