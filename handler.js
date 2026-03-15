@@ -1,6 +1,6 @@
 /*
 Creador: Shadow Flash
-https://chat.whatsapp.com/IyxuHbUdgvYBcVit6sThOO
+Versión: Musicart + Anti-Errores (Híbrido Definitivo)
 */
 
 import ws from 'ws';
@@ -16,149 +16,141 @@ import antilink from './commands/antilink.js';
 import { getGroupAdmins } from './lib/message.js';
 import blacklist from './blacklist.js';
 
-seeCommands()
+// Inicializar Comandos
+seeCommands();
 
-const botSessionCache = new Map()
-const botSessionCacheTime = new Map()
-const CACHE_TTL = 30000 
+const botSessionCache = new Map();
+const botSessionCacheTime = new Map();
+const CACHE_TTL = 30000; 
 
+// --- CACHÉ DE PERMISOS ---
 function updatePermissionCaches() {
-  global.ownerSet = new Set((global.owner || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'))
-  global.modsSet = new Set((global.mods || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'))
-  global.maintenanceSet = new Set((global.maintenanceUsers || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'))
-  global.blacklistSet = new Set((blacklist || []).map(n => n.replace(/\D/g, '')))
+  global.ownerSet = new Set((global.owner || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'));
+  global.modsSet = new Set((global.mods || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'));
+  global.maintenanceSet = new Set((global.maintenanceUsers || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'));
+  global.blacklistSet = new Set((blacklist || []).map(n => n.replace(/\D/g, '')));
 }
+updatePermissionCaches();
 
-updatePermissionCaches()
-
-function getAllSessionBots() {
-  const now = Date.now()
-  const cached = botSessionCache.get('sessions')
-  const cachedTime = botSessionCacheTime.get('sessions') || 0
-  if (cached && (now - cachedTime) < CACHE_TTL) return cached
-
-  const sessionDirs = ['./Sessions/Subs']
-  let bots = []
-  for (const dir of sessionDirs) {
-    try {
-      const subDirs = fs.readdirSync(path.resolve(dir))
-      for (const sub of subDirs) {
-        const credsPath = path.resolve(dir, sub, 'creds.json')
-        if (fs.existsSync(credsPath)) bots.push(sub + '@s.whatsapp.net')
-      }
-    } catch {}
-  }
-  try {
-    const ownerId = global.client?.user?.id?.split(':')[0] + '@s.whatsapp.net'
-    if (ownerId) bots.push(ownerId)
-  } catch {}
-  botSessionCache.set('sessions', bots); botSessionCacheTime.set('sessions', now)
-  return bots
-}
-
-let lastPrefixConfig = null; let compiledPrefixRegex = null; let lastBotname = null
-global.invalidatePrefixCache = () => { lastPrefixConfig = null; compiledPrefixRegex = null; lastBotname = null }
-
+// --- GESTIÓN DE PREFIJOS DINÁMICOS ---
+let lastPrefixConfig = null; let compiledPrefixRegex = null; let lastBotname = null;
 function getOrCompilePrefix(botname, prefixChars) {
-  if (lastBotname === botname && lastPrefixConfig === prefixChars && compiledPrefixRegex) return compiledPrefixRegex
-  const prefixes = [botname, botname.charAt(0), botname.split(" ")[0]]
-  const escapedChars = (prefixChars || '').replace(/[|\\{}()[\]^$+*?.\-\^]/g, '\\$&')
-  try { compiledPrefixRegex = new RegExp(`^(${prefixes.join('|')})?[${escapedChars}]`, 'i') } 
-  catch (e) { compiledPrefixRegex = new RegExp(`^(${prefixes.join('|')})?[\\/\\#\\.]`, 'i') }
-  lastBotname = botname; lastPrefixConfig = prefixChars
-  return compiledPrefixRegex
+  if (lastBotname === botname && lastPrefixConfig === prefixChars && compiledPrefixRegex) return compiledPrefixRegex;
+  const prefixes = [botname, botname.charAt(0), botname.split(" ")[0]];
+  const escapedChars = (prefixChars || '').replace(/[|\\{}()[\]^$+*?.\-\^]/g, '\\$&');
+  try { compiledPrefixRegex = new RegExp(`^(${prefixes.join('|')})?[${escapedChars}]`, 'i'); } 
+  catch (e) { compiledPrefixRegex = new RegExp(`^(${prefixes.join('|')})?[\\/\\#\\.]`, 'i'); }
+  lastBotname = botname; lastPrefixConfig = prefixChars;
+  return compiledPrefixRegex;
 }
 
 function getTodayDate() {
-  return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-')
+  return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-');
 }
 
-const groupMetadataCache = new Map(); const GROUP_CACHE_TTL = 60000 
+const groupMetadataCache = new Map(); const GROUP_CACHE_TTL = 60000; 
 async function getCachedGroupMetadata(client, chatId) {
-  const now = Date.now()
-  if (groupMetadataCache.has(chatId) && (now - (groupMetadataCache.get(chatId).time || 0)) < GROUP_CACHE_TTL) return groupMetadataCache.get(chatId).data
-  const metadata = await client.groupMetadata(chatId).catch(() => null)
-  if (metadata) groupMetadataCache.set(chatId, { data: metadata, time: now })
-  return metadata
+  const now = Date.now();
+  if (groupMetadataCache.has(chatId) && (now - (groupMetadataCache.get(chatId).time || 0)) < GROUP_CACHE_TTL) return groupMetadataCache.get(chatId).data;
+  const metadata = await client.groupMetadata(chatId).catch(() => null);
+  if (metadata) groupMetadataCache.set(chatId, { data: metadata, time: now });
+  return metadata;
 }
 
 function isUserInAdminList(user, adminList) {
-  return adminList.some(p => p.id?.split(':')[0] === user?.split(':')[0])
+  return adminList.some(p => p.id?.split(':')[0] === user?.split(':')[0]);
 }
 
+// --- HANDLER PRINCIPAL ---
 export default async (client, m) => {
-  if (!m?.message) return 
-  const sender = m.sender.split(':')[0] + '@s.whatsapp.net'
+  if (!m?.message) return;
 
-  let body = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply?.selectedRowId || m.message.templateButtonReplyMessage?.selectedId || m.message.interactiveResponseMessage?.body?.text || ''
+  const sender = m.sender.split(':')[0] + '@s.whatsapp.net';
+  const myNumber = '51983564381@s.whatsapp.net'; // Respaldo de seguridad
 
-  if (/3EB0|BAE5|B24E/.test(m.id)) return
+  // 1. Cuerpo del mensaje
+  let body = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply?.selectedRowId || m.message.templateButtonReplyMessage?.selectedId || m.message.interactiveResponseMessage?.body?.text || '';
 
-  try { initDB(m, client) } catch (e) { return }
-  if (!global.db?.data) return
-  antilink(m, client)
+  if (/3EB0|BAE5|B24E/.test(m.id)) return;
 
-  const from = m.key.remoteJid
-  const selfId = client.user.id.split(':')[0] + "@s.whatsapp.net"
-  const settings = global.db.data.settings[selfId] || {}
-  const rawPrefijo = settings.prefijo || '#/'
-  const prefas = Array.isArray(rawPrefijo) ? rawPrefijo : [rawPrefijo]
-  const botname2 = settings.namebot2 || 'Musicart'
+  // 2. Base de Datos e Inicialización
+  try { initDB(m, client); } catch (e) { console.error(chalk.red("Error DB:"), e); return; }
+  if (!global.db?.data) return;
+  antilink(m, client);
 
-  const prefixRegex = getOrCompilePrefix(botname2, prefas.join(''))
-  const prefixMatch = body.match(prefixRegex)
-  const prefix = prefixMatch ? prefixMatch[0] : null
+  const from = m.key.remoteJid;
+  const selfId = client.user.id.split(':')[0] + "@s.whatsapp.net";
+  const settings = global.db.data.settings[selfId] || {};
+  const rawPrefijo = settings.prefijo || '#/';
+  const prefas = Array.isArray(rawPrefijo) ? rawPrefijo : [rawPrefijo];
+  const botname2 = settings.namebot2 || 'Musicart';
 
-  const todayDate = getTodayDate()
-  const chat = global.db.data.chats[from] || {}
-  const tf = chat.users?.[m.sender] || {}
+  // 3. Sistema de Prefijos
+  const prefixRegex = getOrCompilePrefix(botname2, prefas.join(''));
+  const prefixMatch = body.match(prefixRegex);
+  const prefix = prefixMatch ? prefixMatch[0] : null;
 
+  // Estadísticas de mensajes
+  const todayDate = getTodayDate();
+  const chat = global.db.data.chats[from] || {};
+  const tf = chat.users?.[m.sender] || {};
   if (tf && Object.keys(tf).length > 0) {
-      if (!tf.stats) tf.stats = {}
-      if (!tf.stats[todayDate]) tf.stats[todayDate] = { msgs: 0, cmds: 0 }
-      tf.stats[todayDate].msgs++
-      tf.lastseen = Date.now()
+      if (!tf.stats) tf.stats = {};
+      if (!tf.stats[todayDate]) tf.stats[todayDate] = { msgs: 0, cmds: 0 };
+      tf.stats[todayDate].msgs++;
+      tf.lastseen = Date.now();
   }
 
-  if (!prefix) return
+  if (!prefix) return;
 
-  // --- CORRECCIÓN DE ARGUMENTOS ---
-  const args = body.slice(prefix.length).trim().split(/ +/)
-  const command = args.shift()?.toLowerCase()
-  const text = args.join(' ')
-  // --------------------------------
+  // 4. Argumentos y Comando (CORREGIDO PARA PLAY)
+  const args = body.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift()?.toLowerCase();
+  const text = args.join(' ');
 
-  const cmdData = global.comandos.get(command) || [...global.comandos.values()].find(c => c.alias && c.alias.includes(command))
+  // 5. Búsqueda de Comando / Alias
+  const cmdData = global.comandos.get(command) || [...global.comandos.values()].find(c => c.alias && c.alias.includes(command));
   
   if (!cmdData) {
-    if (settings.prefijo === true) return
-    return m.reply(`ꕤ El comando *${prefix}${command}* no existe.`)
+    if (settings.prefijo === true) return;
+    return; // Evita spam si el comando no existe
   }
 
-  const pushname = m.pushName || 'Sin nombre'
-  let groupMetadata = m.isGroup ? await getCachedGroupMetadata(client, m.chat) : null
-  let groupAdmins = groupMetadata?.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin') || []
-  const isBotAdmins = m.isGroup ? isUserInAdminList(selfId, groupAdmins) : false
-  const isAdmins = m.isGroup ? isUserInAdminList(sender, groupAdmins) : false
-  const isVotOwn = global.ownerSet.has(sender)
+  // 6. Información de Grupo y Permisos
+  const pushname = m.pushName || 'Sin nombre';
+  let groupMetadata = m.isGroup ? await getCachedGroupMetadata(client, m.chat) : null;
+  let groupAdmins = groupMetadata?.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin') || [];
+  
+  const isBotAdmins = m.isGroup ? isUserInAdminList(selfId, groupAdmins) : false;
+  const isAdmins = m.isGroup ? isUserInAdminList(sender, groupAdmins) : false;
+  const isVotOwn = global.ownerSet.has(sender) || sender === myNumber;
 
-  // Registro en consola
-  console.log(chalk.cyan(`𝄢 · • —– ٠ ✤ ٠ —– • ·✧༄\n❚ ▸ 𝐁𝐎𝐓 ❱❱ ${selfId}\n❚ ▸ 𝐔𝐒𝐔𝐀𝐑𝐈𝐎 ❱❱ ${pushname}\n❚ ▸ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 ❱❱ ${prefix + command}\n𝄢 · • —– ٠ ✤ ٠ —– • ·✧༄`))
+  // Log de Consola
+  console.log(chalk.cyan(`𝄢 · • —– ٠ ✤ ٠ —– • ·✧༄\n❚ ▸ 𝐁𝐎𝐓 ❱❱ ${selfId}\n❚ ▸ 𝐔𝐒𝐔𝐀𝐑𝐈𝐎 ❱❱ ${pushname}\n❚ ▸ 𝐂𝐎𝐌𝐀𝐍𝐃𝐎 ❱❱ ${prefix + command}\n𝄢 · • —– ٠ ✤ ٠ —– • ·✧༄`));
 
-  // Validaciones de seguridad
-  if (chat.bannedGrupo && !isVotOwn) return
-  if (tf.banned && !isVotOwn) return m.reply(`ꕥ Has sido vetado.`)
-  if (cmdData.isOwner && !isVotOwn) return m.reply(`ꕤ Solo el Owner puede usar esto.`)
-  if (cmdData.isAdmin && !isAdmins) return m.reply('Necesitas ser Admin.')
-  if (cmdData.botAdmin && !isBotAdmins) return m.reply('Necesito ser Admin.')
+  // 7. Validaciones de Seguridad
+  if (chat.bannedGrupo && !isVotOwn) return;
+  if (tf.banned && !isVotOwn) return m.reply(`ꕥ Has sido vetado.`);
+  
+  const userNumber = sender.replace(/\D/g, '');
+  if (global.blacklistSet.has(userNumber) && !isVotOwn) return m.reply('`𑁍` Estás en la lista negra.');
 
+  if (cmdData.isOwner && !isVotOwn) return m.reply(`ꕤ Solo el Owner puede usar *${prefix}${command}*.`);
+  if (cmdData.isAdmin && !isAdmins) return m.reply('Necesitas ser Admin.');
+  if (cmdData.botAdmin && !isBotAdmins) return m.reply('Necesito ser Admin.');
+
+  // 8. Ejecución Final
   try {
-    const userGlobal = global.db.data.users[m.sender] || {}
-    userGlobal.usedcommands = (userGlobal.usedcommands || 0) + 1
-    userGlobal.exp = (userGlobal.exp || 0) + Math.floor(Math.random() * 100)
-    if (tf.stats?.[todayDate]) tf.stats[todayDate].cmds++
+    await client.readMessages([m.key]).catch(() => {});
+    
+    const userGlobal = global.db.data.users[m.sender] || {};
+    userGlobal.usedcommands = (userGlobal.usedcommands || 0) + 1;
+    userGlobal.exp = (userGlobal.exp || 0) + Math.floor(Math.random() * 100);
+    userGlobal.name = pushname;
+    
+    if (tf.stats?.[todayDate]) tf.stats[todayDate].cmds++;
 
-    // --- EJECUCIÓN CON OBJETO (PARA COMPATIBILIDAD) ---
+    // Ejecución compatible con objetos { args, text... }
     await cmdData.run(client, m, { 
         args, 
         text, 
@@ -166,13 +158,15 @@ export default async (client, m) => {
         prefix, 
         groupMetadata,
         isAdmins,
-        isBotAdmins
-    })
-    // --------------------------------------------------
+        isBotAdmins,
+        isVotOwn
+    });
 
   } catch (error) {
-    console.error(chalk.red(`[ RUN ERROR ] →`), error)
-    return m.reply('🌱 Error al ejecutar el comando.')
+    console.error(chalk.red(`[ RUN ERROR ] →`), error);
+    if (!error.message.includes('db.write')) { // Ignorar error de escritura para evitar crash
+        return m.reply('🌱 Error al ejecutar el comando.');
+    }
   }
-  level(m)
+  level(m);
 };
