@@ -1,20 +1,23 @@
 import fs from 'fs';
 import chalk from 'chalk';
 
+// ———————————————————————————————————————————————————————————————————
+// CONFIGURACIÓN DE DUEÑOS Y PREFIJO
+// ———————————————————————————————————————————————————————————————————
 global.owner = [  
-  '5491140642242',
-  '51983564381',
-  '584228028583'
+  ['51983564381', 'Shadow Flash', true],
+  ['5491140642242', 'Owner 2', true],
+  ['584228028583', 'Owner 3', true]
 ]
 
-global.maintenanceUsers = [
+global.prefix = '√' // <--- TU NUEVO PREFIJO ESTABLECIDO
 
-] 
+global.maintenanceUsers = [] 
+global.mods = []
 
-global.mods = [
-
-]
-
+// ———————————————————————————————————————————————————————————————————
+// INFO DEL BOT
+// ———————————————————————————————————————————————————————————————————
 global.sessionName = 'Sessions/Owner'
 global.version = 'V1.0|Alphaᵖªᵗᶜʰ'
 global.internalVersion = 'V1.0.0/51'
@@ -23,13 +26,12 @@ global.number_bot = ''
 global.msgglobal = '[Error: *TypeError*] fetch failed'
 globalThis.dev = '❀ 𝙿𝚘𝚠𝚎𝚛𝚎𝚍 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗 ❀'
 
+// ———————————————————————————————————————————————————————————————————
+// APIS Y CONEXIONES (EvoGB Activa)
+// ———————————————————————————————————————————————————————————————————
 global.api = {
   url: 'https://api.evogb.org',
   key: 'evogb-dR7kpt3M'
-/*
-  url: 'https://api.stellarwa.xyz',
-  key: 'Alba070503'
-*/
 }
 
 global.bot = {
