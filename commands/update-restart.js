@@ -12,7 +12,7 @@ import chalk from 'chalk'
 const execPromise = promisify(exec)
 
 export default {
-  command: ['update', 'fix', 'actualizar'], // Responde a ¥update o ¥fix
+  command: ['rfix', 'actualizar'], // Responde a ¥update o ¥fix
   isOwner: true, // Solo tú (Shadow) puedes usarlo
   run: async (client, m) => {
     try {
