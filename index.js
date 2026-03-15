@@ -1,5 +1,5 @@
 /*
-Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
+Creador: Shadow Flash
 
 https://chat.whatsapp.com/IyxuHbUdgvYBcVit6sThOO
 */
