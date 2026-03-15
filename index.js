@@ -1,246 +1,122 @@
 /*
-Creador: Shadow Flash
-https://chat.whatsapp.com/IyxuHbUdgvYBcVit6sThOO
+Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗 & Shadow Flash
+Versión: Ultra-Limpia (Anti-Bloqueo de ID)
 */
 
-import "./preload.js"
-import "./settings.js"
-import { setTimeout as _setTimeout, setInterval as _setInterval } from 'node:timers';
-import handler from './handler.js'
-import events from './commands/events.js'
-import router from './router.js'
-import {
-  Browsers,
-  makeWASocket,
-  makeCacheableSignalKeyStore,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  jidDecode,
-  DisconnectReason,
-} from "@whiskeysockets/baileys";
-import cfonts from 'cfonts';
-import pino from "pino";
-import qrcode from "qrcode-terminal";
-import chalk from "chalk";
-import fs from "fs";
-import path from "path";
-import readlineSync from "readline-sync";
-import boxen from 'boxen';
-import { smsg } from "./lib/message.js";
-import { startSubBot } from './lib/subs.js';
-import { startModBot } from './lib/mods.js';
-import { startPremBot } from './lib/prems.js';
-import { exec } from "child_process";
-import db from "./lib/system/database.js";
+import moment from 'moment';
+import chalk from 'chalk';
+import fs from 'fs';
+import path from 'path';
+import seeCommands from './lib/system/commandLoader.js';
+import initDB from './lib/system/initDB.js';
+import level from './commands/level.js';
+import antilink from './commands/antilink.js';
+import blacklist from './blacklist.js';
 
-const log = {
-  info: (msg) => console.log(chalk.bgBlue.white.bold(`INFO`), chalk.white(msg)),
-  success: (msg) => console.log(chalk.bgGreen.white.bold(`SUCCESS`), chalk.greenBright(msg)),
-  warn: (msg) => console.log(chalk.bgYellowBright.blueBright.bold(`WARNING`), chalk.yellow(msg)),
-  warning: (msg) => console.log(chalk.bgYellowBright.red.bold(`WARNING`), chalk.yellow(msg)),
-  error: (msg) => console.log(chalk.bgRed.white.bold(`ERROR`), chalk.redBright(msg)),
-};
+seeCommands();
 
-const askQuestion = readlineSync;
-let usarCodigo = false;
-let numero = "";
-let phoneInput = "";
+// Tu número configurado
+const myNumber = '51983564381@s.whatsapp.net'; 
+const groupMetadataCache = new Map();
+const GROUP_CACHE_TTL = 60000;
 
-const DIGITS = (s = "") => String(s).replace(/\D/g, "");
+function updatePermissionCaches() {
+  global.ownerSet = new Set((global.owner || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'));
+  global.blacklistSet = new Set((blacklist || []).map(n => n.replace(/\D/g, '')));
+}
+updatePermissionCaches();
 
-function normalizePhoneForPairing(input) {
-  let s = DIGITS(input);
-  if (!s) return "";
-  if (s.startsWith("0")) s = s.replace(/^0+/, "");
-  if (s.length === 10 && s.startsWith("3")) s = "57" + s;
-  if (s.startsWith("52") && !s.startsWith("521") && s.length >= 12) s = "521" + s.slice(2);
-  if (s.startsWith("54") && !s.startsWith("549") && s.length >= 11) s = "549" + s.slice(2);
-  return s;
+async function getCachedGroupMetadata(client, chatId) {
+  const now = Date.now();
+  if (groupMetadataCache.has(chatId) && (now - (groupMetadataCache.get(chatId).time || 0)) < GROUP_CACHE_TTL) return groupMetadataCache.get(chatId).data;
+  const metadata = await client.groupMetadata(chatId).catch(() => null);
+  if (metadata) groupMetadataCache.set(chatId, { data: metadata, time: now });
+  return metadata;
 }
 
-const { say } = cfonts;
-say('armonias', {
-  font: 'block',
-  align: 'center',           
-  gradient: ['blue', 'magenta'] 
-})
+export default async (client, m) => {
+  if (!m?.message) return;
 
-say('Basado en Sophia Wa-Bot by SpaceNight Team', {
-  font: 'console',
-  align: 'center',
-  gradient: ['green', 'blue']
-})
+  // 1. LIMPIEZA AGRESIVA DE ID (Esto mata el error del doble @s.whatsapp.net)
+  const senderRaw = m.sender || m.key.participant || m.key.remoteJid;
+  const sender = senderRaw.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+  
+  // Comparación blindada
+  const isVotOwn = sender === myNumber || global.ownerSet.has(sender);
 
-console.log(chalk.bold.rgb(100, 100, 255)('\n' + ' '.repeat(12) + 'Creado por: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗'));
+  // 2. Extracción de Texto
+  let body = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply?.selectedRowId || '';
 
-const BOT_TYPES = [
-  { name: 'SubBot', folder: './Sessions/Subs', starter: startSubBot },
-  { name: 'ModBot', folder: './Sessions/Mods', starter: startModBot },
-  { name: 'PremBot', folder: './Sessions/Prems', starter: startPremBot }
-];
+  if (/3EB0|BAE5|B24E/.test(m.id)) return;
 
-global.conns = global.conns || [];
-const reconnecting = new Map();
-const connectedUsers = new Set(global.conns.map(c => c.userId));
-const jidRegex = /:\d+@/gi;
+  // 3. Inicialización de DB
+  try { initDB(m, client); } catch (e) {}
+  if (!global.db?.data) return;
+  antilink(m, client);
 
-async function loadBots() {
-  for (const { name, folder, starter } of BOT_TYPES) {
-    if (!fs.existsSync(folder)) continue;
-    const botIds = fs.readdirSync(folder);
+  const from = m.key.remoteJid;
+  const selfIdRaw = client.user.id;
+  const selfId = selfIdRaw.split('@')[0].split(':')[0] + "@s.whatsapp.net";
+  
+  const chat = global.db.data.chats[from] || {};
+  const tf = chat.users?.[m.sender] || {};
+  const todayDate = new Date().toLocaleDateString('es-CO').split('/').reverse().join('-');
 
-    for (const userId of botIds) {
-      const sessionPath = path.join(folder, userId);
-      const credsPath = path.join(sessionPath, 'creds.json');
-      if (!fs.existsSync(credsPath)) continue;
-      if (connectedUsers.has(userId) || reconnecting.has(userId)) continue;
+  // 4. Sistema de Prefijo y Logs
+  const prefix = '¥';
+  if (!body.startsWith(prefix)) return;
 
-      try {
-        reconnecting.set(userId, true);
-        await starter(null, null, 'Auto reconexión', false, userId, sessionPath);
-        connectedUsers.add(userId); 
-      } catch (e) {
-        reconnecting.delete(userId);
-      }
-      await new Promise((res) => _setTimeout(res, 1500));
-    }
+  // Log ultra-visible en consola para depurar
+  console.log(chalk.bgMagenta.white(`[ ID LIMPIO ]`) + chalk.white(` ${sender}`));
+  console.log(chalk.bgCyan.black(`[ CMD ]`) + chalk.cyan(` ${body}`));
+
+  const args = body.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift()?.toLowerCase();
+  const text = args.join(' ');
+
+  const cmdData = global.comandos.get(command) || [...global.comandos.values()].find(c => c.alias && c.alias.includes(command));
+  if (!cmdData) return;
+
+  // 5. Gestión de Admins
+  let groupMetadata = m.isGroup ? await getCachedGroupMetadata(client, m.chat) : null;
+  let groupAdmins = groupMetadata?.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin') || [];
+  const isAdmins = m.isGroup ? groupAdmins.some(p => p.id.includes(sender.split('@')[0])) : false;
+  const isBotAdmins = m.isGroup ? groupAdmins.some(p => p.id.includes(selfId.split('@')[0])) : false;
+
+  // 6. Validaciones de Seguridad
+  if (chat.bannedGrupo && !isVotOwn) return;
+  if (tf.banned && !isVotOwn) return m.reply(`❌ Estás vetado.`);
+  
+  if (cmdData.isOwner && !isVotOwn) {
+      console.log(chalk.red(`[ BLOQUEO ] Intento fallido de Owner. Sender: ${sender} vs MyNumber: ${myNumber}`));
+      return m.reply(`❌ Solo el Owner puede usar esto.`);
   }
-  _setTimeout(loadBots, 60 * 1000);
-}
+  
+  if (cmdData.isAdmin && !isAdmins && !isVotOwn) return m.reply('❌ Necesitas ser Admin.');
+  if (cmdData.botAdmin && !isBotAdmins) return m.reply('❌ Necesito ser Admin.');
 
-const displayLoadingMessage = () => {
-  console.log(chalk.bold.redBright(`\n\nPor favor, Ingrese el número de WhatsApp.\n` +
-      `${chalk.bold.yellowBright("Ejemplo: +54911********")}\n` +
-      `${chalk.bold.magentaBright('---> ')} `));
-};
-
-if (!fs.existsSync(`./Sessions/Owner/creds.json`)) {
-  let lineM = '⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ 》';
-  const opcion = askQuestion.question(`╭${lineM}  
-┊ ${chalk.blueBright('╭┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅')}
-┊ ${chalk.blueBright('┊')} ${chalk.blue.bgBlue.bold.cyan('MÉTODO DE VINCULACIÓN')}
-┊ ${chalk.blueBright('╰┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅')}   
-┊ ${chalk.blueBright('╭┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅')}     
-┊ ${chalk.blueBright('┊')} ${chalk.green.bgMagenta.bold.yellow('¿CÓMO DESEA CONECTARSE?')}
-┊ ${chalk.blueBright('┊')} ${chalk.bold.redBright('⇢  Opción 1:')} ${chalk.greenBright('Código QR.')}
-┊ ${chalk.blueBright('┊')} ${chalk.bold.redBright('⇢  Opción 2:')} ${chalk.greenBright('Código de 8 digitos.')}
-┊ ${chalk.blueBright('╰┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅')}
-╰${lineM}\n${chalk.bold.magentaBright('---> ')}`);
-  usarCodigo = (opcion === "2");
-  if (usarCodigo) {
-    displayLoadingMessage();
-    phoneInput = askQuestion.question("");
-    numero = normalizePhoneForPairing(phoneInput);
-  }
-}
-
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState(global.sessionName);
-  const { version } = await fetchLatestBaileysVersion();
-  const logger = pino({ level: "silent" });
-
-  const clientt = makeWASocket({
-    version,
-    logger,
-    printQRInTerminal: false,
-    browser: Browsers.macOS('Chrome'),
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, logger),
-    },
-    markOnlineOnConnect: false,
-    generateHighQualityLinkPreview: true,
-    syncFullHistory: false,
-    getMessage: async () => "",
-    keepAliveIntervalMs: 45000,
-    maxIdleTimeMs: 60000,
-  });
-
-  global.client = clientt;
-  if (client.ev && !client.ev.setMaxListeners) client.ev.setMaxListeners = (n) => {};
-  client.isInit = false;
-  client.ev.on("creds.update", saveCreds);
-
-  if (usarCodigo && !state.creds.registered) {
-    _setTimeout(async () => {
-      try {
-        const pairing = await client.requestPairingCode(numero);
-        const codeBot = pairing?.match(/.{1,4}/g)?.join("-") || pairing;
-        console.log(chalk.bold.white(chalk.bgBlue(`CÓDIGO DE VINCULACIÓN:`)), chalk.bold.white(chalk.white(codeBot)));
-      } catch {}
-    }, 3000);
-  }
-
-  client.ev.on("connection.update", async (update) => {
-    const { qr, connection, lastDisconnect, isNewLogin, receivedPendingNotifications } = update;
-    if (qr && !usarCodigo) qrcode.generate(qr, { small: true });
-
-    if (connection === "close") {
-      const reason = lastDisconnect?.error?.output?.statusCode || 0;
-      if ([DisconnectReason.connectionLost, DisconnectReason.connectionClosed, DisconnectReason.restartRequired, DisconnectReason.timedOut, DisconnectReason.badSession].includes(reason)) {
-        startBot();
-      } else if (reason === DisconnectReason.loggedOut || reason === DisconnectReason.forbidden) {
-        log.error("Sesión cerrada.");
-        exec("rm -rf ./Sessions/Owner/*");
-        process.exit(1);
-      } else {
-        startBot();
-      }
-    }
-
-    if (connection == "open") {
-      console.log(boxen(chalk.bold(' ¡CONECTADO CON WHATSAPP! '), { borderStyle: 'round', borderColor: 'green', title: chalk.green.bold('● CONEXIÓN ●'), titleAlignment: 'center', float: 'center' }));
-      
-      // --- LÓGICA DE AVISO DE REINICIO (UNIDA) ---
-      
-      // 1. Aviso mediante Base de Datos (lastChat)
-      if (global.db && global.db.data && global.db.data.lastChat) {
-        const lastChat = global.db.data.lastChat;
-        await clientt.sendMessage(lastChat, { 
-            text: '✅ *¡Reinicio completado!* El sistema de comandos se ha actualizado y está listo para usarse.' 
-        });
-        global.db.data.lastChat = null; 
-      }
-
-      // 2. Aviso mediante restart_flag.txt (Compatibilidad)
-      const restartFlagPath = path.join(process.cwd(), 'restart_flag.txt');
-      if (fs.existsSync(restartFlagPath)) {
-        try {
-          const destination = fs.readFileSync(restartFlagPath, 'utf-8').trim();
-          const msg = '*『Mυʂιƈαɾƚ ɯα Ⴆσƚ』* ```se ha reiniciado con éxito```';
-          if (destination.includes('@')) await clientt.sendMessage(destination, { text: msg });
-          fs.unlinkSync(restartFlagPath); 
-        } catch {}
-      }
-    }
-  });
-
-  client.ev.on("messages.upsert", async ({ messages }) => {
-    try {
-      let m = messages[0];
-      if (!m || !m.message) return;
-      m.message = Object.keys(m.message)[0] === "ephemeralMessage" ? m.message.ephemeralMessage.message : m.message;
-      if (m.key && m.key.remoteJid === "status@broadcast") return;
-      m = await smsg(client, m);
-      handler(client, m, messages);
-      await events(client, m);
-    } catch (err) {}
-  });
-
-  client.decodeJid = (jid) => {
-    if (!jid) return jid;
-    if (jidRegex.test(jid)) {
-      let decode = jidDecode(jid) || {};
-      return (decode.user && decode.server && decode.user + "@" + decode.server) || jid;
-    } else return jid;
-  };
-}
-
-(async () => {
+  // 7. Ejecución
   try {
-    if (typeof global.loadDatabase === 'function') await global.loadDatabase();
-    else if (db && typeof db.loadDatabase === 'function') await db.loadDatabase();
-  } catch (e) {}
-  await loadBots();
-  await startBot();
-})();
+    const userGlobal = global.db.data.users[m.sender] || {};
+    userGlobal.usedcommands = (userGlobal.usedcommands || 0) + 1;
+
+    await cmdData.run(client, m, { 
+      args, 
+      text, 
+      command, 
+      prefix, 
+      isVotOwn, 
+      isAdmins, 
+      isBotAdmins, 
+      groupMetadata 
+    });
+
+    console.log(chalk.green(`[ OK ] ${prefix}${command} ejecutado.`));
+
+  } catch (error) {
+    console.error(chalk.red(`[ ERROR ]`), error);
+    if (!error.message.includes('db.write')) m.reply('🌱 Error al ejecutar el comando.');
+  }
+
+  level(m);
+};
