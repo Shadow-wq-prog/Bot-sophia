@@ -1,6 +1,6 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗 & Shadow Flash
-Versión: Híbrida Estable (Identificación Absoluta)
+Versión: Híbrida Estable (Fix ReferenceError)
 */
 
 import moment from 'moment';
@@ -15,16 +15,12 @@ import blacklist from './blacklist.js';
 
 seeCommands();
 
-// --- CONFIGURACIÓN DE IDENTIDAD ---
 const myNumber = '51983564381@s.whatsapp.net'; 
-
-// --- CACHÉ Y PERMISOS ---
 const groupMetadataCache = new Map();
 const GROUP_CACHE_TTL = 60000;
 
 function updatePermissionCaches() {
   global.ownerSet = new Set((global.owner || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'));
-  global.modsSet = new Set((global.mods || []).map(num => num.replace(/[^0-9]/g, '') + '@s.whatsapp.net'));
   global.blacklistSet = new Set((blacklist || []).map(n => n.replace(/\D/g, '')));
 }
 updatePermissionCaches();
@@ -40,7 +36,7 @@ async function getCachedGroupMetadata(client, chatId) {
 export default async (client, m) => {
   if (!m?.message) return;
 
-  // 1. Identificación
+  // 1. Identificación limpia
   const sender = m.sender.split(':')[0] + '@s.whatsapp.net';
   const isVotOwn = sender === myNumber || global.ownerSet.has(sender);
 
@@ -49,13 +45,8 @@ export default async (client, m) => {
 
   if (/3EB0|BAE5|B24E/.test(m.id)) return;
 
-  // 3. Base de Datos (Segura)
-  try { 
-    initDB(m, client); 
-  } catch (e) { 
-    console.error(chalk.red(`[ ERROR DB ]`), e); 
-  }
-  
+  // 3. Base de Datos e Inicialización
+  try { initDB(m, client); } catch (e) {}
   if (!global.db?.data) return;
   antilink(m, client);
 
@@ -63,7 +54,19 @@ export default async (client, m) => {
   const selfId = client.user.id.split(':')[0] + "@s.whatsapp.net";
   const settings = global.db.data.settings[selfId] || {};
   
-  // 4. Sistema de Prefijo (Fijo para evitar fallos)
+  // --- DEFINICIÓN DE VARIABLES DE CHAT/USUARIO (ARREGLA EL ERROR) ---
+  const chat = global.db.data.chats[from] || {};
+  const tf = chat.users?.[m.sender] || {};
+  const todayDate = new Date().toLocaleDateString('es-CO').split('/').reverse().join('-');
+
+  if (tf && Object.keys(tf).length > 0) {
+      if (!tf.stats) tf.stats = {};
+      if (!tf.stats[todayDate]) tf.stats[todayDate] = { msgs: 0, cmds: 0 };
+      tf.stats[todayDate].msgs++;
+      tf.lastseen = Date.now();
+  }
+  // ------------------------------------------------------------------
+
   const prefix = '¥';
   if (!body.startsWith(prefix)) return;
 
@@ -71,36 +74,31 @@ export default async (client, m) => {
   const command = args.shift()?.toLowerCase();
   const text = args.join(' ');
 
-  // 5. Búsqueda de Comando o Alias
   const cmdData = global.comandos.get(command) || [...global.comandos.values()].find(c => c.alias && c.alias.includes(command));
   if (!cmdData) return;
 
-  // 6. Validaciones de Grupo y Admin
   let groupMetadata = m.isGroup ? await getCachedGroupMetadata(client, m.chat) : null;
   let groupAdmins = groupMetadata?.participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin') || [];
   const isAdmins = m.isGroup ? groupAdmins.some(p => p.id === sender) : false;
   const isBotAdmins = m.isGroup ? groupAdmins.some(p => p.id === selfId) : false;
 
-  // Log en consola
-  console.log(chalk.green(`[ CMD ] → ${prefix}${command} | Usuario: ${sender} | Grupo: ${m.isGroup ? 'Si' : 'No'}`));
+  console.log(chalk.cyan(`[ CMD ] → ${prefix}${command} | De: ${sender}`));
 
-  // 7. Filtros de Seguridad (Identificación prioritaria)
+  // 4. Filtros de Seguridad
+  if (chat.bannedGrupo && !isVotOwn) return;
   if (tf.banned && !isVotOwn) return m.reply(`❌ Estás vetado.`);
   if (global.blacklistSet.has(sender.replace(/\D/g, '')) && !isVotOwn) return m.reply('❌ Estás en la lista negra.');
   
-  // VALIDACIÓN CLAVE: Si es comando de Owner y NO eres tú, rebota.
-  if (cmdData.isOwner && !isVotOwn) return m.reply(`❌ Acceso denegado. Solo el Owner real puede usar esto.`);
-  
+  if (cmdData.isOwner && !isVotOwn) return m.reply(`❌ Solo el Owner puede usar esto.`);
   if (cmdData.isAdmin && !isAdmins && !isVotOwn) return m.reply('❌ Necesitas ser Admin.');
-  if (cmdData.botAdmin && !isBotAdmins) return m.reply('❌ Necesito ser Admin para ejecutar esto.');
+  if (cmdData.botAdmin && !isBotAdmins) return m.reply('❌ Necesito ser Admin.');
 
-  // 8. Ejecución
+  // 5. Ejecución
   try {
-    const todayDate = new Date().toLocaleDateString('es-CO').split('/').reverse().join('-');
     const userGlobal = global.db.data.users[m.sender] || {};
     userGlobal.usedcommands = (userGlobal.usedcommands || 0) + 1;
-    
-    // Ejecución con el objeto completo para compatibilidad
+    if (tf.stats?.[todayDate]) tf.stats[todayDate].cmds++;
+
     await cmdData.run(client, m, { 
       args, 
       text, 
