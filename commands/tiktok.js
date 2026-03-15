@@ -1,6 +1,6 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
-Versión: V3 (Solución definitiva a Enlace Inválido)
+Versión: V4 (Blindaje Anti-HTML y Multi-API)
 */
 
 import fetch from 'node-fetch';
@@ -14,7 +14,7 @@ export default {
         try {
             await client.sendMessage(m.chat, { react: { text: '🔍', key: m.key } });
 
-            // 1. Búsqueda de videos
+            // 1. Buscamos el video (Usamos una API de búsqueda estable)
             const searchRes = await fetch(`https://api.lolhuman.xyz/api/tiktoksearch?apikey=GataDios&query=${encodeURIComponent(text)}`);
             const searchJson = await searchRes.json();
 
@@ -22,29 +22,38 @@ export default {
                 throw new Error('No encontré resultados para esa búsqueda.');
             }
 
-            // Obtenemos el link del primer resultado
             const videoUrl = searchJson.result[0].link; 
+            let finalVideo = null;
 
-            // 2. Descarga sin marca de agua
-            // Probamos con un servidor más robusto para evitar el error de "link function"
-            const downloadRes = await fetch(`https://api.gtatutoriales.top/api/v1/tiktok?url=${videoUrl}`);
-            const downloadJson = await downloadRes.json();
+            // 2. Intentamos descargar con 2 métodos diferentes (Sistema de Respaldo)
+            const downloadApis = [
+                `https://api.lolhuman.xyz/api/tiktok?apikey=GataDios&url=${videoUrl}`,
+                `https://api.botcahx.eu.org/api/dowloader/tiktok?url=${videoUrl}&apikey=Admin`
+            ];
 
-            // Validamos que el enlace de descarga exista y sea un texto
-            const finalVideo = downloadJson.result?.video?.no_watermark || downloadJson.result?.url;
-
-            if (!finalVideo || typeof finalVideo !== 'string') {
-                throw new Error('El servidor entregó un formato incompatible. Intenta con otra búsqueda.');
+            for (const api of downloadApis) {
+                try {
+                    const res = await fetch(api);
+                    const json = await res.json();
+                    
+                    // Verificamos que el resultado sea un String (URL) y no una función
+                    const link = json.result?.link || json.result?.video?.no_watermark || json.result?.video;
+                    if (link && typeof link === 'string' && link.startsWith('http')) {
+                        finalVideo = link;
+                        break;
+                    }
+                } catch (e) {
+                    continue; // Si una falla, pasamos a la siguiente
+                }
             }
 
-            let caption = `亗 *TIKTOK DOWNLOADER* 亗\n\n`;
-            caption += `📝 *Título:* ${downloadJson.result?.title || text}\n`;
-            caption += `👤 *Usuario:* ${downloadJson.result?.author?.nickname || 'TikToker'}\n\n`;
-            caption += `> ⚙️ *Descargado con éxito sin marca de agua.*`;
+            if (!finalVideo) {
+                throw new Error('Los servidores de descarga están saturados. Intenta en un momento.');
+            }
 
             await client.sendMessage(m.chat, { 
                 video: { url: finalVideo }, 
-                caption: caption
+                caption: `亗 *TIKTOK DOWNLOADER* 亗\n\n> ✅ Video encontrado y procesado sin marca de agua.`
             }, { quoted: m });
 
             await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
