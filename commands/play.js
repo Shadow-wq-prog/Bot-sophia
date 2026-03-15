@@ -1,44 +1,70 @@
+/*
+Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
+Versión: Multi-Server (Anti-Error HTML)
+*/
+
 import fetch from 'node-fetch';
 
 export default {
     command: ['play', 'musica'],
     alias: ['p'],
     run: async (client, m, { text }) => {
-        if (!text) return m.reply('音乐 *Por favor, indica el nombre de la canción.*');
+        if (!text) return m.reply('音乐 *Indica el nombre de la canción.*');
 
         try {
             await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
-            // URL ACTUALIZADA A .ORG
-            const api_key = 'evogb-zrJLlAnF'; 
-            const url = `https://api.evogb.org/api/v1/ytplay?query=${encodeURIComponent(text)}&key=${api_key}`;
+            // CONFIGURACIÓN DE SERVIDORES
+            const servers = [
+                {
+                    name: 'Evogb (Principal)',
+                    url: `https://api.evogb.org/api/v1/ytplay?query=${encodeURIComponent(text)}&key=evogb-zrJLlAnF`,
+                    map: (data) => data.result.download
+                },
+                {
+                    name: 'LolHuman (Respaldo)',
+                    url: `https://api.lolhuman.xyz/api/ytplay?apikey=GataDios&query=${encodeURIComponent(text)}`,
+                    map: (data) => data.result.audio
+                }
+            ];
 
-            const res = await fetch(url);
-            
-            // Si la respuesta no es JSON, capturamos el error aquí
-            const textData = await res.text();
-            let json;
-            try {
-                json = JSON.parse(textData);
-            } catch (e) {
-                throw new Error('La API respondió con un error de servidor (HTML). Intenta más tarde.');
+            let audioUrl = null;
+            let finalTitle = text;
+
+            for (const server of servers) {
+                try {
+                    console.log(`Intentando con ${server.name}...`);
+                    const res = await fetch(server.url);
+                    const textRes = await res.text();
+
+                    // Si el servidor responde con HTML (error), saltamos al siguiente
+                    if (textRes.includes('<!DOCTYPE html>')) continue;
+
+                    const json = JSON.parse(textRes);
+                    audioUrl = server.map(json);
+                    
+                    if (audioUrl) {
+                        if (json.result.title) finalTitle = json.result.title;
+                        break; // Éxito, salimos del bucle
+                    }
+                } catch (err) {
+                    continue; // Error en este servidor, probar siguiente
+                }
             }
 
-            if (!json.result || !json.result.download) {
-                throw new Error('No se encontró el archivo o la Key no tiene saldo.');
-            }
+            if (!audioUrl) throw new Error('Todos los servidores de música están caídos. Intenta más tarde.');
 
             await client.sendMessage(m.chat, { 
-                audio: { url: json.result.download }, 
+                audio: { url: audioUrl }, 
                 mimetype: 'audio/mpeg',
-                fileName: `${json.result.title}.mp3`
+                fileName: `${finalTitle}.mp3`
             }, { quoted: m });
 
             await client.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (e) {
             console.error(e);
-            m.reply(`❌ *ERROR:* ${e.message}`);
+            m.reply(`❌ *FALLO CRÍTICO:* ${e.message}`);
             await client.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
         }
     }
