@@ -1,34 +1,46 @@
 /*
 Creador: 亗𝙽𝚎𝚝𝚑𝚎𝚛𝙻𝚘𝚛𝚍亗
-Versión: Estable - Sin Marca de Agua
+Versión: Búsqueda Directa (Sin Link) + No Watermark
 */
 
 import fetch from 'node-fetch';
 
 export default {
     command: ['tiktok', 'tk', 'tt'],
-    alias: ['tiktokdl'],
-    run: async (client, m, { text }) => {
-        if (!text) return m.reply('✨ *Por favor, envía un enlace de TikTok.*');
-        if (!text.includes('tiktok.com')) return m.reply('❌ *El enlace no es válido.*');
+    alias: ['tiktoks'],
+    run: async (client, m, { text, prefix, command }) => {
+        if (!text) return m.reply(`✨ *¿Qué deseas buscar en TikTok?*\n\nEjemplo: *${prefix + command} Messi edit*`);
 
         try {
-            await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
+            await client.sendMessage(m.chat, { react: { text: '🔍', key: m.key } });
 
-            // Usaremos una API estable de descarga
-            const res = await fetch(`https://api.lolhuman.xyz/api/tiktok?apikey=GataDios&url=${text}`);
-            const json = await res.json();
+            // 1. Buscamos el video basándonos en el texto
+            const searchRes = await fetch(`https://api.lolhuman.xyz/api/tiktoksearch?apikey=GataDios&query=${encodeURIComponent(text)}`);
+            const searchJson = await searchRes.json();
 
-            if (!json.result || !json.result.link) {
-                throw new Error('No se pudo obtener el video. Es posible que sea privado o el enlace esté roto.');
+            if (!searchJson.result || searchJson.result.length === 0) {
+                throw new Error('No encontré ningún video con ese nombre.');
             }
 
-            const { link, title, author, nickname } = json.result;
+            // Tomamos el primer resultado (el más relevante)
+            const videoUrl = searchJson.result[0].link; 
+            
+            await client.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
-            let caption = `亗 *TIKTOK DOWNLOADER* 亗\n\n`;
-            caption += `📝 *Título:* ${title || 'Sin título'}\n`;
-            caption += `👤 *Usuario:* ${nickname} (@${author})\n\n`;
-            caption += `> ⚙️ Cargando video sin marca de agua...`;
+            // 2. Descargamos el video del link obtenido (Sin marca de agua)
+            const downloadRes = await fetch(`https://api.lolhuman.xyz/api/tiktok?apikey=GataDios&url=${videoUrl}`);
+            const downloadJson = await downloadRes.json();
+
+            if (!downloadJson.result || !downloadJson.result.link) {
+                throw new Error('Encontré el video pero no pude procesar la descarga.');
+            }
+
+            const { link, title, author, nickname } = downloadJson.result;
+
+            let caption = `亗 *TIKTOK SEARCH* 亗\n\n`;
+            caption += `📝 *Título:* ${title || text}\n`;
+            caption += `👤 *Autor:* ${nickname} (@${author})\n\n`;
+            caption += `> ⚙️ *Enviando el primer resultado de la búsqueda...*`;
 
             await client.sendMessage(m.chat, { 
                 video: { url: link }, 
